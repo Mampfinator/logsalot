@@ -221,6 +221,7 @@ async fn make_embed(
                 }
             }
 
+            // slightly hacky workaround - we don't want to log embed deletions (yet).
             if content_changed || attachments_could_have_changed {
                 Some((
                     CreateMessage::new().embed(log_embed.description(description)),
@@ -231,6 +232,76 @@ async fn make_embed(
             } else {
                 None
             }
+        }
+        // USERS
+        FullEvent::GuildMemberAddition { new_member: member } => {
+            let embed = base_embed(&member.user)
+                .colour(Colour::DARK_GREEN)
+                .description(format!(
+                    "<@{}> ({}) joined.",
+                    member.user.id, member.user.name
+                ))
+                .field(
+                    "Joined At",
+                    format!("<t:{}:R>", member.joined_at?.timestamp()),
+                    true,
+                )
+                .field(
+                    "Created At",
+                    format!("<t:{}:R>", member.user.created_at().timestamp()),
+                    true,
+                );
+
+            Some((
+                CreateMessage::new().embed(embed),
+                LogType::Member,
+                member.guild_id,
+                None,
+            ))
+        }
+        FullEvent::GuildMemberRemoval {
+            guild_id,
+            user,
+            member_data_if_available,
+        } => {
+            // TODO: shit's fucked. Members are not gonna be cached. We may be able to fetch guilds on startup?
+            let member = member_data_if_available.as_ref()?;
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+            let embed = base_embed(user)
+                .colour(Colour::DARK_RED)
+                .description(format!("<@{}> ({}) left.", user.id, user.name))
+                .field(
+                    "Joined At",
+                    format!("<t:{}:R>", member.joined_at?.timestamp()),
+                    true,
+                )
+                .field(
+                    "Created At",
+                    format!("<t:{}:R>", user.created_at().timestamp()),
+                    true,
+                )
+                .field("Left At", format!("<t:{}:R>", now), true);
+
+            Some((
+                CreateMessage::new().embed(embed),
+                LogType::Member,
+                *guild_id,
+                None,
+            ))
+        }
+        FullEvent::GuildMemberUpdate {
+            old_if_available,
+            new: _,
+            event: _,
+        } => {
+            let _old = old_if_available.as_ref()?;
+
+            None
         }
         _ => None,
     }
